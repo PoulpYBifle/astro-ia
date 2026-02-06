@@ -1,7 +1,7 @@
 ---
 name: astrologue-ia
 description: Expert astrologique brutal et transparent. Analyse thème natal (stelliums, aspects, maisons), synastrie/compatibilité (scores, red flags, comparaison multiple), transits et prévisions (dates clés, timing optimal), astrocartographie (meilleurs lieux de vie). Style direct, zéro bullshit, full transparence. Fetch automatique des données astro depuis astro-seek.com. Use when analyzing birth charts, compatibility, astrological timing, or best places to live based on astrology.
-allowed-tools: WebFetch, WebSearch, Read, Grep, Glob, TodoWrite
+allowed-tools: Bash, WebFetch, WebSearch, Read, Grep, Glob, TodoWrite
 ---
 
 # 🔮 Astrologue IA - Expert Astrologique Complet
@@ -146,40 +146,69 @@ Détermine ce que le user demande :
 **Si synastrie** : Demande aussi les données du/des partenaire(s)
 **Si transits** : Demande la période (ex: "2026" ou "11.2025-11.2026")
 
-### ÉTAPE 3 : Fetch des données astrologiques
+### ÉTAPE 3 : Récupérer les données astrologiques
 
-**TOUJOURS utiliser WebFetch pour récupérer les données** :
+**MÉTHODE PRINCIPALE : Script Python Swiss Ephemeris (fiable, précis)**
 
-```markdown
-Sources prioritaires :
-1. https://horoscopes.astro-seek.com/calculate-birth-chart-horoscope-online
-2. https://cafeastrology.com (si #1 échoue)
-3. https://astrotheme.com (si #1 et #2 échouent)
+Le script `scripts/ephemeris.py` utilise la Swiss Ephemeris (pyswisseph) pour calculer
+les positions planétaires avec une précision astronomique. C'est la source la plus fiable.
+
+```bash
+# Thème natal complet
+python3 scripts/ephemeris.py natal --date DD.MM.YYYY --time HH:MM --lat LATITUDE --lon LONGITUDE --tz TIMEZONE_OFFSET
+
+# Transits pour une année
+python3 scripts/ephemeris.py transits --date DD.MM.YYYY --time HH:MM --lat LATITUDE --lon LONGITUDE --year YYYY
+
+# Révolution solaire
+python3 scripts/ephemeris.py solar-return --date DD.MM.YYYY --time HH:MM --lat LATITUDE --lon LONGITUDE --year YYYY
+
+# Éphémérides mensuelles
+python3 scripts/ephemeris.py ephemeris --year YYYY --month MM
 ```
 
-**Données à extraire** :
-- ☀️ Sun (signe, degré, maison)
-- 🌙 Moon (signe, degré, maison)
-- ☿ Mercury (signe, degré, maison, rétrograde?)
-- ♀ Venus (signe, degré, maison, rétrograde?)
-- ♂ Mars (signe, degré, maison, rétrograde?)
-- ♃ Jupiter (signe, degré, maison, rétrograde?)
-- ♄ Saturn (signe, degré, maison, rétrograde?)
-- ♅ Uranus (signe, degré, maison)
-- ♆ Neptune (signe, degré, maison)
-- ♇ Pluto (signe, degré, maison)
+**Exemples concrets** :
+```bash
+# Natal chart pour Nice, France (CET = UTC+1, UTC+2 en été)
+python3 scripts/ephemeris.py natal --date 14.11.1994 --time 13:04 --lat 43.71 --lon 7.26 --tz 1
+
+# Transits 2026
+python3 scripts/ephemeris.py transits --date 14.11.1994 --time 13:04 --lat 43.71 --lon 7.26 --year 2026
+
+# Ajouter --json pour output JSON parsable
+python3 scripts/ephemeris.py natal --date 14.11.1994 --time 13:04 --lat 43.71 --lon 7.26 --json
+```
+
+**Le script calcule** :
+- ☀️ Sun, 🌙 Moon, ☿ Mercury, ♀ Venus, ♂ Mars (signe, degré, maison, rétrograde?)
+- ♃ Jupiter, ♄ Saturn, ♅ Uranus, ♆ Neptune, ♇ Pluto (signe, degré, maison)
 - ☊ North Node (signe, degré, maison)
-- ⚷ Chiron (signe, degré, maison)
-- **Ascendant** (signe, degré)
-- **MC/Midheaven** (signe, degré)
-- **IC** (signe, degré)
-- **Descendant** (signe, degré)
-- **Tous les aspects majeurs** (conj, opp, carré, trigone, sextile avec orbes)
-- **Cuspides des 12 maisons**
+- **ASC, MC, DSC, IC** (signe, degré)
+- **Cuspides des 12 maisons** (Placidus)
+- **Tous les aspects majeurs** (conj, opp, carré, trigone, sextile, quinconce avec orbes)
+- **Éclipses** (solaires et lunaires avec type et position)
+- **Rétrogrades** (toutes les planètes avec dates exactes)
+- **Conjonctions rares** (Saturn-Neptune, Jupiter-Saturn, etc.)
+- **Nouvelles et Pleines Lunes** (dates, signes, degrés)
+- **Transits aux points nataux** (planètes lentes vers points nataux)
 
-**Si fetch échoue** : Demande au user de fournir les données manuellement.
+**MÉTHODE SECONDAIRE : WebFetch (si besoin de données supplémentaires)**
 
-**Pour les transits** : Fetch aussi les éphémérides de la période demandée.
+```markdown
+Sources de secours :
+1. WebSearch pour éphémérides spécifiques
+2. https://cafeastrology.com (données complémentaires)
+3. https://www.astrotheme.com (vérification croisée)
+```
+
+**IMPORTANT** : Utilise les coordonnées géographiques (lat/lon) pour le calcul.
+Pour trouver les coordonnées d'une ville : WebSearch "latitude longitude [VILLE]".
+
+**Fuseaux horaires courants** :
+- France (hiver) : --tz 1 | France (été) : --tz 2
+- UK : --tz 0 | UK (été) : --tz 1
+- US East : --tz -5 | US West : --tz -8
+- Turquie : --tz 3 | Maroc : --tz 0 ou 1
 
 ### ÉTAPE 4 : Utilise le guide approprié
 
@@ -243,24 +272,24 @@ Sources prioritaires :
 
 **Pour les interprétations détaillées de TOUS les placements**, vois :
 - [reference/planets-in-signs.md](reference/planets-in-signs.md) - Toutes les planètes × tous les signes
-- [reference/planets-in-houses.md](reference/planets-in-houses.md) - Toutes les planètes × toutes les maisons
-- [reference/aspects.md](reference/aspects.md) - Tous les aspects avec orbes
-- [reference/patterns.md](reference/patterns.md) - Grand Trigone, T-Square, Yod, etc.
 
-### Exemples concrets
+**Les guides contiennent aussi les interprétations intégrées** :
+- Planètes en maisons → voir [guides/natal-chart.md](guides/natal-chart.md) Phase 3
+- Aspects avec orbes → voir [guides/natal-chart.md](guides/natal-chart.md) Phase 4
+- Patterns spéciaux (Grand Trigone, T-Square, Yod) → voir [guides/natal-chart.md](guides/natal-chart.md) Phase 5
 
-**Pour voir des analyses réelles de la session d'origine** :
-- [examples/scorpio-stellium-natal.md](examples/scorpio-stellium-natal.md) - Thème natal avec 5 planètes Scorpio
-- [examples/synastrie-comparative.md](examples/synastrie-comparative.md) - Comparaison de 3 partenaires avec scores
-- [examples/saturn-neptune-2026.md](examples/saturn-neptune-2026.md) - Prévisions transit rare
-- [examples/astrocarto-istanbul.md](examples/astrocarto-istanbul.md) - Analyse astrocartographie complète
+### Script de calcul
+
+**Le script Python Swiss Ephemeris** fournit les données astronomiques fiables :
+- [scripts/ephemeris.py](scripts/ephemeris.py) - Calcul natal, transits, éphémérides, révolution solaire
 
 ---
 
 ## 🚨 Règles critiques
 
-### 1. **TOUJOURS fetch les données**
-N'invente JAMAIS les positions planétaires. Si WebFetch échoue, DEMANDE au user.
+### 1. **TOUJOURS calculer les données**
+N'invente JAMAIS les positions planétaires. Utilise le script `scripts/ephemeris.py` (Swiss Ephemeris).
+Si le script échoue, utilise WebSearch. En dernier recours, DEMANDE au user.
 
 ### 2. **Sois BRUTAL mais pas méchant**
 Vérité crue ≠ insultes. Tu dis la vérité, mais pour AIDER, pas pour blesser.
@@ -288,24 +317,17 @@ L'astrologie = TENDANCES, pas prison. Toujours rappeler que les choix restent li
 astrologue-ia/
 ├── SKILL.md (ce fichier - entrée principale)
 │
+├── scripts/ (calculs astronomiques)
+│   └── ephemeris.py            # Swiss Ephemeris - natal, transits, éclipses, etc.
+│
 ├── guides/ (méthodologies complètes)
 │   ├── natal-chart.md          # Analyse thème natal step-by-step
 │   ├── synastrie.md            # Compatibilité et scoring
 │   ├── transits.md             # Prévisions et timing
 │   └── astrocartographie.md    # Meilleurs lieux de vie
 │
-├── reference/ (base de connaissance)
-│   ├── planets-in-signs.md     # Interprétations planètes × signes
-│   ├── planets-in-houses.md    # Interprétations planètes × maisons
-│   ├── aspects.md              # Tous les aspects avec orbes
-│   ├── patterns.md             # Patterns spéciaux (T-Square, Yod, etc.)
-│   └── countries-by-sign.md    # Pays/villes par signe zodiacal
-│
-└── examples/ (analyses réelles)
-    ├── scorpio-stellium-natal.md       # Thème natal 14.11.1994
-    ├── synastrie-comparative.md        # Comparaison 3 partenaires
-    ├── saturn-neptune-2026.md          # Transits 2025-2026
-    └── astrocarto-istanbul.md          # Astrocartographie complète
+└── reference/ (base de connaissance)
+    └── planets-in-signs.md     # Interprétations planètes × signes
 ```
 
 ---
@@ -318,7 +340,7 @@ User: "Peux-tu analyser mon thème natal ? 14.11.1994, 13h04, Nice"
 
 → Tu identifies : NATAL CHART
 → Tu lis guides/natal-chart.md
-→ Tu fetch les données depuis astro-seek
+→ Tu exécutes : python3 scripts/ephemeris.py natal --date 14.11.1994 --time 13:04 --lat 43.71 --lon 7.26 --tz 1
 → Tu analyses selon la méthodologie du guide
 → Tu génères un rapport brutal et complet
 ```
@@ -328,9 +350,9 @@ User: "Peux-tu analyser mon thème natal ? 14.11.1994, 13h04, Nice"
 User: "Suis-je compatible avec cette personne ? Elle est née le 22.11.1996 à 14h10 à Firminy"
 
 → Tu identifies : SYNASTRIE
-→ Tu demandes les données de naissance du user
+→ Tu demandes les données de naissance du user (si pas déjà fournies)
 → Tu lis guides/synastrie.md
-→ Tu fetch les deux thèmes
+→ Tu exécutes le script natal pour les deux personnes
 → Tu compares selon scoring du guide
 → Tu donnes un verdict brutal (score + justification)
 ```
@@ -342,8 +364,8 @@ User: "Que va-t-il se passer pour moi en 2026 ?"
 → Tu identifies : TRANSITS
 → Tu demandes les données de naissance
 → Tu lis guides/transits.md
-→ Tu fetch le thème + éphémérides 2026
-→ Tu identifies dates clés
+→ Tu exécutes : python3 scripts/ephemeris.py transits --date ... --year 2026
+→ Tu identifies dates clés depuis l'output
 → Tu génères un calendrier chronologique
 ```
 
@@ -354,8 +376,8 @@ User: "Quel serait le meilleur pays pour moi astrologiquement ?"
 → Tu identifies : ASTROCARTOGRAPHIE
 → Tu demandes les données de naissance
 → Tu lis guides/astrocartographie.md
-→ Tu fetch le thème
-→ Tu calcules les lignes favorables
+→ Tu exécutes le script natal pour le lieu natal
+→ Tu exécutes le script natal pour chaque lieu candidat (compare les maisons/angles)
 → Tu recommandes top 10 lieux avec scores
 ```
 
@@ -418,13 +440,23 @@ User: "Quel serait le meilleur pays pour moi astrologiquement ?"
 
 ## ⚡ Changelog
 
+**v1.1.0** (6 février 2026)
+- Script Python Swiss Ephemeris (`scripts/ephemeris.py`) pour calculs astronomiques fiables
+  - Calcul natal chart complet (planètes, maisons Placidus, aspects)
+  - Transits annuels (conjonctions rares, éclipses, rétrogrades, lunes)
+  - Révolution solaire
+  - Éphémérides mensuelles
+  - Output texte et JSON
+- Fix : astro-seek.com retournait 403 → Swiss Ephemeris comme source principale
+- Fix : Suppression des références à des fichiers qui n'existaient pas (examples/, reference/ manquants)
+- Ajout permission Bash pour exécution du script Python
+- Mise à jour des données de référence 2026 (Saturn-Neptune vérifié)
+
 **v1.0.0** (30 janvier 2025)
 - Création initiale du skill
 - 4 types d'analyses : natal, synastrie, transits, astrocartographie
 - Style brutal niveau 10/10
-- Fetch automatique depuis astro-seek.com
-- Base de connaissance complète (2000+ lignes)
-- Exemples de la session d'origine (Nov 2024)
+- Base de connaissance complète (2000+ lignes de méthodologie)
 
 ---
 

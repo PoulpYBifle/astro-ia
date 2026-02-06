@@ -705,18 +705,19 @@ Et si 'la maîtresse des ténèbres' était TURQUE et que la rencontre te POUSSE
 
 ---
 
-## 🔍 Exemple d'analyse complète
+## 🔍 Résultats de référence (session d'origine 14.11.1994 Nice)
 
-Voir [examples/astrocarto-istanbul.md](../examples/astrocarto-istanbul.md) pour l'analyse complète incluant :
-- Top 10 lieux (Istanbul, Marrakech, Washington DC, La Nouvelle-Orléans, etc.)
-- Scores détaillés
-- Récap par objectif
-- Timing de déménagement
-
-**Résultat exemple** :
+**Top 3 lieux pour stellium Scorpio** :
 - **Istanbul : 10/10** - Triple activation (Jupiter IC + Sun IC + pays Scorpio)
 - **Marrakech : 9.5/10** - Jupiter MC + Pluto MC + pays Scorpio
-- **Washington DC : 9/10** - Ville Scorpio + maçonnerie
+- **Washington DC : 9/10** - Ville Scorpio + hub politique/pouvoir
+
+**Pour calculer les angles à différentes localisations**, utilise le script :
+```bash
+python3 scripts/ephemeris.py natal --date DD.MM.YYYY --time HH:MM --lat NEW_LAT --lon NEW_LON --tz TZ
+```
+Compare les maisons et angles entre le lieu natal et le lieu cible pour voir
+quelles planètes deviennent angulaires (sur ASC/MC/DSC/IC).
 
 ---
 
