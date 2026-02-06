@@ -575,6 +575,238 @@ def solar_return(natal_date: str, natal_time: str, lat: float, lon: float,
     }
 
 
+def composite_chart(chart1: dict, chart2: dict, lat: float, lon: float) -> dict:
+    """Calculate composite chart (midpoint method) from two natal charts."""
+    comp_planets = {}
+    for name in chart1["planets"]:
+        if name in chart2["planets"]:
+            lon1 = chart1["planets"][name]["longitude"]
+            lon2 = chart2["planets"][name]["longitude"]
+            # Calculate midpoint (shortest arc)
+            diff = lon2 - lon1
+            if diff > 180:
+                diff -= 360
+            elif diff < -180:
+                diff += 360
+            midpoint = (lon1 + diff / 2) % 360
+            comp_planets[name] = get_sign(midpoint)
+            comp_planets[name]["retrograde"] = False
+
+    # Composite ASC/MC midpoints
+    asc1 = chart1["houses"]["ASC"]["longitude"]
+    asc2 = chart2["houses"]["ASC"]["longitude"]
+    mc1 = chart1["houses"]["MC"]["longitude"]
+    mc2 = chart2["houses"]["MC"]["longitude"]
+
+    diff_asc = asc2 - asc1
+    if diff_asc > 180: diff_asc -= 360
+    elif diff_asc < -180: diff_asc += 360
+    comp_asc = (asc1 + diff_asc / 2) % 360
+
+    diff_mc = mc2 - mc1
+    if diff_mc > 180: diff_mc -= 360
+    elif diff_mc < -180: diff_mc += 360
+    comp_mc = (mc1 + diff_mc / 2) % 360
+
+    # Calculate aspects
+    aspects = []
+    planet_names = list(comp_planets.keys())
+    for i in range(len(planet_names)):
+        for j in range(i + 1, len(planet_names)):
+            p1, p2 = planet_names[i], planet_names[j]
+            aspect = calc_aspect(comp_planets[p1]["longitude"], comp_planets[p2]["longitude"])
+            if aspect:
+                aspects.append({"planet1": p1, "planet2": p2, **aspect})
+
+    return {
+        "type": "Composite",
+        "planets": comp_planets,
+        "ASC": get_sign(comp_asc),
+        "MC": get_sign(comp_mc),
+        "DSC": get_sign((comp_asc + 180) % 360),
+        "IC": get_sign((comp_mc + 180) % 360),
+        "aspects": aspects,
+    }
+
+
+def davison_chart(date1: str, time1: str, lat1: float, lon1: float,
+                  date2: str, time2: str, lat2: float, lon2: float,
+                  tz1: float = 1.0, tz2: float = 1.0) -> dict:
+    """Calculate Davison relationship chart (midpoint in time and space)."""
+    y1, m1, d1 = parse_date(date1)
+    y2, m2, d2 = parse_date(date2)
+    h1 = local_to_ut(parse_time(time1), (y1, m1, d1), tz1)
+    h2 = local_to_ut(parse_time(time2), (y2, m2, d2), tz2)
+
+    jd1 = swe.julday(y1, m1, d1, h1)
+    jd2 = swe.julday(y2, m2, d2, h2)
+    jd_mid = (jd1 + jd2) / 2
+    lat_mid = (lat1 + lat2) / 2
+    lon_mid = (lon1 + lon2) / 2
+
+    mid_date = swe.revjul(jd_mid)
+
+    planets = {}
+    for name, pid in PLANETS.items():
+        pos = calc_planet(jd_mid, pid)
+        if pos:
+            planets[name] = pos
+
+    houses = calc_houses(jd_mid, lat_mid, lon_mid)
+    cusps_list = [houses["cusps"][f"H{i+1}"]["longitude"] for i in range(12)]
+    for name in planets:
+        planets[name]["house"] = get_house_for_planet(planets[name]["longitude"], cusps_list)
+
+    return {
+        "type": "Davison",
+        "midpoint_date": f"{int(mid_date[2]):02d}.{int(mid_date[1]):02d}.{int(mid_date[0])}",
+        "midpoint_time_ut": f"{int(mid_date[3]):02d}:{int((mid_date[3] % 1) * 60):02d} UT",
+        "midpoint_location": {"latitude": round(lat_mid, 2), "longitude": round(lon_mid, 2)},
+        "planets": planets,
+        "houses": houses,
+    }
+
+
+def progressed_chart(natal_date: str, natal_time: str, lat: float, lon: float,
+                     target_age: int, tz_offset: float = 1.0) -> dict:
+    """Calculate secondary progressions (1 day = 1 year)."""
+    year, month, day = parse_date(natal_date)
+    local_hours = parse_time(natal_time)
+    ut_hours = local_to_ut(local_hours, (year, month, day), tz_offset)
+
+    jd_natal = swe.julday(year, month, day, ut_hours)
+    jd_progressed = jd_natal + target_age  # 1 day per year
+
+    prog_date = swe.revjul(jd_progressed)
+
+    planets = {}
+    for name, pid in PLANETS.items():
+        pos = calc_planet(jd_progressed, pid)
+        if pos:
+            planets[name] = pos
+
+    # Compare with natal for direction changes
+    natal_planets = {}
+    for name, pid in PLANETS.items():
+        pos = calc_planet(jd_natal, pid)
+        if pos:
+            natal_planets[name] = pos
+
+    direction_changes = []
+    for name in planets:
+        if name in natal_planets:
+            if planets[name]["retrograde"] != natal_planets[name]["retrograde"]:
+                change = "direct → retrograde" if planets[name]["retrograde"] else "retrograde → direct"
+                direction_changes.append({"planet": name, "change": change})
+
+    houses = calc_houses(jd_progressed, lat, lon)
+    cusps_list = [houses["cusps"][f"H{i+1}"]["longitude"] for i in range(12)]
+    for name in planets:
+        planets[name]["house"] = get_house_for_planet(planets[name]["longitude"], cusps_list)
+
+    # Calculate aspects between progressed and natal
+    prog_to_natal = []
+    for pname, pdata in planets.items():
+        for nname, ndata in natal_planets.items():
+            aspect = calc_aspect(pdata["longitude"], ndata["longitude"])
+            if aspect and aspect["type"] in ("conjunction", "opposition", "square", "trine"):
+                prog_to_natal.append({
+                    "progressed": pname,
+                    "natal": nname,
+                    **aspect,
+                })
+
+    return {
+        "type": "Secondary Progressions",
+        "age": target_age,
+        "progressed_date": f"{int(prog_date[2]):02d}.{int(prog_date[1]):02d}.{int(prog_date[0])}",
+        "planets": planets,
+        "natal_planets": natal_planets,
+        "houses": houses,
+        "direction_changes": direction_changes,
+        "progressed_to_natal_aspects": prog_to_natal,
+    }
+
+
+def profection(natal_date: str, natal_time: str, lat: float, lon: float,
+               target_age: int, tz_offset: float = 1.0) -> dict:
+    """Calculate annual profection for a given age."""
+    chart = natal_chart(natal_date, natal_time, lat, lon, tz_offset)
+
+    profection_house = (target_age % 12) + 1
+    cusp_sign = chart["houses"]["cusps"][f"H{profection_house}"]
+
+    # Determine Time Lord (traditional ruler of the profection sign)
+    traditional_rulers = {
+        "Aries": "Mars", "Taurus": "Venus", "Gemini": "Mercury",
+        "Cancer": "Moon", "Leo": "Sun", "Virgo": "Mercury",
+        "Libra": "Venus", "Scorpio": "Mars", "Sagittarius": "Jupiter",
+        "Capricorn": "Saturn", "Aquarius": "Saturn", "Pisces": "Jupiter",
+    }
+    time_lord_name = traditional_rulers.get(cusp_sign["sign"], "Unknown")
+    time_lord_data = chart["planets"].get(time_lord_name)
+
+    house_themes = {
+        1: "Identité, corps, nouveau cycle",
+        2: "Argent, valeurs, possessions",
+        3: "Communication, fratrie, apprentissage",
+        4: "Famille, foyer, racines",
+        5: "Créativité, romance, enfants",
+        6: "Santé, travail quotidien, routine",
+        7: "Relations, mariage, partenariats",
+        8: "Transformation, sexe, crises, héritage",
+        9: "Voyages, spiritualité, études",
+        10: "Carrière, réputation, ambition",
+        11: "Amis, espoirs, communauté",
+        12: "Solitude, spiritualité, auto-sabotage",
+    }
+
+    return {
+        "type": "Annual Profection",
+        "age": target_age,
+        "profection_house": profection_house,
+        "profection_sign": cusp_sign["sign"],
+        "theme": house_themes.get(profection_house, ""),
+        "time_lord": {
+            "name": time_lord_name,
+            "natal_position": time_lord_data["formatted"] if time_lord_data else "N/A",
+            "natal_house": time_lord_data.get("house", "N/A") if time_lord_data else "N/A",
+            "retrograde": time_lord_data["retrograde"] if time_lord_data else False,
+        },
+    }
+
+
+def draconic_chart(natal_date: str, natal_time: str, lat: float, lon: float,
+                   tz_offset: float = 1.0) -> dict:
+    """Calculate draconic chart (North Node = 0° Aries)."""
+    chart = natal_chart(natal_date, natal_time, lat, lon, tz_offset)
+    nn_lon = chart["planets"]["North Node"]["longitude"]
+
+    draconic_planets = {}
+    for name, data in chart["planets"].items():
+        drac_lon = (data["longitude"] - nn_lon) % 360
+        drac_info = get_sign(drac_lon)
+        draconic_planets[name] = {
+            **drac_info,
+            "natal_position": data["formatted"],
+            "retrograde": data["retrograde"],
+        }
+
+    # Draconic angles
+    drac_asc = (chart["houses"]["ASC"]["longitude"] - nn_lon) % 360
+    drac_mc = (chart["houses"]["MC"]["longitude"] - nn_lon) % 360
+
+    return {
+        "type": "Draconic",
+        "nn_offset": round(nn_lon, 4),
+        "planets": draconic_planets,
+        "ASC": get_sign(drac_asc),
+        "MC": get_sign(drac_mc),
+        "DSC": get_sign((drac_asc + 180) % 360),
+        "IC": get_sign((drac_mc + 180) % 360),
+    }
+
+
 def format_natal_text(chart: dict) -> str:
     """Format natal chart as readable text."""
     lines = []
@@ -719,6 +951,63 @@ def main():
     sr_parser.add_argument("--year", type=int, required=True, help="Year for Solar Return")
     sr_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # Composite
+    comp_parser = subparsers.add_parser("composite", help="Composite chart (midpoint)")
+    comp_parser.add_argument("--date1", required=True, help="Person 1 birth date (DD.MM.YYYY)")
+    comp_parser.add_argument("--time1", required=True, help="Person 1 birth time (HH:MM)")
+    comp_parser.add_argument("--lat1", type=float, required=True, help="Person 1 latitude")
+    comp_parser.add_argument("--lon1", type=float, required=True, help="Person 1 longitude")
+    comp_parser.add_argument("--tz1", type=float, default=1.0, help="Person 1 timezone offset")
+    comp_parser.add_argument("--date2", required=True, help="Person 2 birth date")
+    comp_parser.add_argument("--time2", required=True, help="Person 2 birth time")
+    comp_parser.add_argument("--lat2", type=float, required=True, help="Person 2 latitude")
+    comp_parser.add_argument("--lon2", type=float, required=True, help="Person 2 longitude")
+    comp_parser.add_argument("--tz2", type=float, default=1.0, help="Person 2 timezone offset")
+    comp_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Davison
+    dav_parser = subparsers.add_parser("davison", help="Davison relationship chart")
+    dav_parser.add_argument("--date1", required=True, help="Person 1 birth date")
+    dav_parser.add_argument("--time1", required=True, help="Person 1 birth time")
+    dav_parser.add_argument("--lat1", type=float, required=True, help="Person 1 latitude")
+    dav_parser.add_argument("--lon1", type=float, required=True, help="Person 1 longitude")
+    dav_parser.add_argument("--tz1", type=float, default=1.0)
+    dav_parser.add_argument("--date2", required=True, help="Person 2 birth date")
+    dav_parser.add_argument("--time2", required=True, help="Person 2 birth time")
+    dav_parser.add_argument("--lat2", type=float, required=True, help="Person 2 latitude")
+    dav_parser.add_argument("--lon2", type=float, required=True, help="Person 2 longitude")
+    dav_parser.add_argument("--tz2", type=float, default=1.0)
+    dav_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Progressions
+    prog_parser = subparsers.add_parser("progressions", help="Secondary progressions")
+    prog_parser.add_argument("--date", required=True, help="Birth date (DD.MM.YYYY)")
+    prog_parser.add_argument("--time", required=True, help="Birth time (HH:MM)")
+    prog_parser.add_argument("--lat", type=float, required=True, help="Latitude")
+    prog_parser.add_argument("--lon", type=float, required=True, help="Longitude")
+    prog_parser.add_argument("--tz", type=float, default=1.0)
+    prog_parser.add_argument("--age", type=int, required=True, help="Age for progressions")
+    prog_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Profection
+    prof_parser = subparsers.add_parser("profection", help="Annual profection")
+    prof_parser.add_argument("--date", required=True, help="Birth date (DD.MM.YYYY)")
+    prof_parser.add_argument("--time", required=True, help="Birth time (HH:MM)")
+    prof_parser.add_argument("--lat", type=float, required=True, help="Latitude")
+    prof_parser.add_argument("--lon", type=float, required=True, help="Longitude")
+    prof_parser.add_argument("--tz", type=float, default=1.0)
+    prof_parser.add_argument("--age", type=int, required=True, help="Age for profection")
+    prof_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Draconic
+    drac_parser = subparsers.add_parser("draconic", help="Draconic chart")
+    drac_parser.add_argument("--date", required=True, help="Birth date (DD.MM.YYYY)")
+    drac_parser.add_argument("--time", required=True, help="Birth time (HH:MM)")
+    drac_parser.add_argument("--lat", type=float, required=True, help="Latitude")
+    drac_parser.add_argument("--lon", type=float, required=True, help="Longitude")
+    drac_parser.add_argument("--tz", type=float, default=1.0)
+    drac_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if args.command == "natal":
@@ -780,6 +1069,102 @@ def main():
             print("\n--- ANGLES ---")
             for angle in ("ASC", "MC", "DSC", "IC"):
                 print(f"  {angle:12s} {sr['houses'][angle]['formatted']}")
+
+    elif args.command == "composite":
+        c1 = natal_chart(args.date1, args.time1, args.lat1, args.lon1, args.tz1)
+        c2 = natal_chart(args.date2, args.time2, args.lat2, args.lon2, args.tz2)
+        comp = composite_chart(c1, c2, args.lat1, args.lon1)
+        if args.json:
+            print(json.dumps(comp, indent=2, ensure_ascii=False))
+        else:
+            print("=" * 60)
+            print("  COMPOSITE CHART (Midpoint Method)")
+            print("=" * 60)
+            print("\n--- PLANETS ---")
+            for name, data in comp["planets"].items():
+                print(f"  {name:12s} {data['formatted']}")
+            print("\n--- ANGLES ---")
+            for angle in ("ASC", "MC", "DSC", "IC"):
+                print(f"  {angle:12s} {comp[angle]['formatted']}")
+            print("\n--- ASPECTS ---")
+            for asp in comp["aspects"]:
+                print(f"  {asp['planet1']:12s} {asp['symbol']} {asp['planet2']:12s} ({asp['type']}, orb {asp['orb']}°)")
+
+    elif args.command == "davison":
+        dav = davison_chart(args.date1, args.time1, args.lat1, args.lon1,
+                            args.date2, args.time2, args.lat2, args.lon2,
+                            args.tz1, args.tz2)
+        if args.json:
+            print(json.dumps(dav, indent=2, ensure_ascii=False))
+        else:
+            print("=" * 60)
+            print("  DAVISON RELATIONSHIP CHART")
+            print(f"  Midpoint: {dav['midpoint_date']} {dav['midpoint_time_ut']}")
+            print(f"  Location: {dav['midpoint_location']}")
+            print("=" * 60)
+            print("\n--- PLANETS ---")
+            for name, data in dav["planets"].items():
+                retro = " (R)" if data["retrograde"] else ""
+                house = f"  [H{data['house']}]" if "house" in data else ""
+                print(f"  {name:12s} {data['formatted']}{retro}{house}")
+            print("\n--- ANGLES ---")
+            for angle in ("ASC", "MC", "DSC", "IC"):
+                print(f"  {angle:12s} {dav['houses'][angle]['formatted']}")
+
+    elif args.command == "progressions":
+        prog = progressed_chart(args.date, args.time, args.lat, args.lon, args.age, args.tz)
+        if args.json:
+            print(json.dumps(prog, indent=2, ensure_ascii=False))
+        else:
+            print("=" * 60)
+            print(f"  SECONDARY PROGRESSIONS - Age {args.age}")
+            print(f"  Progressed to: {prog['progressed_date']}")
+            print("=" * 60)
+            print("\n--- PROGRESSED PLANETS ---")
+            for name, data in prog["planets"].items():
+                retro = " (R)" if data["retrograde"] else ""
+                natal = prog["natal_planets"].get(name, {}).get("formatted", "")
+                print(f"  {name:12s} {data['formatted']}{retro}  (natal: {natal})")
+            if prog["direction_changes"]:
+                print("\n--- DIRECTION CHANGES ---")
+                for dc in prog["direction_changes"]:
+                    print(f"  {dc['planet']:12s} {dc['change']}")
+            if prog["progressed_to_natal_aspects"]:
+                print("\n--- PROGRESSED-TO-NATAL ASPECTS ---")
+                for asp in prog["progressed_to_natal_aspects"]:
+                    print(f"  P.{asp['progressed']:10s} {asp['symbol']} N.{asp['natal']:10s} ({asp['type']}, orb {asp['orb']}°)")
+
+    elif args.command == "profection":
+        prof = profection(args.date, args.time, args.lat, args.lon, args.age, args.tz)
+        if args.json:
+            print(json.dumps(prof, indent=2, ensure_ascii=False))
+        else:
+            print("=" * 60)
+            print(f"  ANNUAL PROFECTION - Age {args.age}")
+            print("=" * 60)
+            print(f"\n  Activated House  : H{prof['profection_house']}")
+            print(f"  Sign             : {prof['profection_sign']}")
+            print(f"  Theme            : {prof['theme']}")
+            print(f"  Time Lord        : {prof['time_lord']['name']}")
+            print(f"  TL natal position: {prof['time_lord']['natal_position']} [H{prof['time_lord']['natal_house']}]")
+            retro = " (R)" if prof['time_lord']['retrograde'] else ""
+            print(f"  TL retrograde    : {retro.strip() if retro else 'No'}")
+
+    elif args.command == "draconic":
+        drac = draconic_chart(args.date, args.time, args.lat, args.lon, args.tz)
+        if args.json:
+            print(json.dumps(drac, indent=2, ensure_ascii=False))
+        else:
+            print("=" * 60)
+            print(f"  DRACONIC CHART (NN offset: {drac['nn_offset']}°)")
+            print("=" * 60)
+            print(f"\n{'  Planet':<14s} {'Draconic':<22s} {'Natal':<22s}")
+            print(f"  {'-'*56}")
+            for name, data in drac["planets"].items():
+                print(f"  {name:<12s} {data['formatted']:<22s} {data['natal_position']:<22s}")
+            print("\n--- DRACONIC ANGLES ---")
+            for angle in ("ASC", "MC", "DSC", "IC"):
+                print(f"  {angle:12s} {drac[angle]['formatted']}")
 
     else:
         parser.print_help()
