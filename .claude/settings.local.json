@@ -1,16 +1,18 @@
 {
   "permissions": {
     "allow": [
+      "Bash(python3 *ephemeris.py*)",
+      "Bash(pip install pyswisseph*)",
       "WebFetch(domain:horoscopes.astro-seek.com)",
-      "WebSearch",
+      "WebFetch(domain:www.astro-seek.com)",
       "WebFetch(domain:cafeastrology.com)",
       "WebFetch(domain:www.astrotheme.com)",
       "WebFetch(domain:mooncalendar.astro-seek.com)",
       "WebFetch(domain:www.findyourfate.com)",
       "WebFetch(domain:www.drstandley.com)",
-      "WebFetch(domain:www.astro-seek.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
+      "WebSearch",
       "Bash(git init:*)",
       "Bash(git add:*)"
     ],

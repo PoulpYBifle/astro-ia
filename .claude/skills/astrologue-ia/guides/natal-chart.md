@@ -618,9 +618,16 @@ Liste 5-10 red flags que la personne doit surveiller chez elle-même :
 
 ---
 
-## 🎯 Exemple d'analyse complète
+## 🎯 Calcul du thème natal
 
-Voir [examples/scorpio-stellium-natal.md](../examples/scorpio-stellium-natal.md) pour une analyse réelle du thème 14.11.1994 13h04 Nice.
+**Utilise le script Swiss Ephemeris pour obtenir les données exactes** :
+
+```bash
+python3 scripts/ephemeris.py natal --date DD.MM.YYYY --time HH:MM --lat LATITUDE --lon LONGITUDE --tz TZ
+```
+
+Le script fournit toutes les positions planétaires, maisons (Placidus), angles et aspects
+avec une précision astronomique basée sur la Swiss Ephemeris (DE431/JPL NASA).
 
 ---
 

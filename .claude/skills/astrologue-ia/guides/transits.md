@@ -41,12 +41,35 @@ Identifier les transits planétaires majeurs pour une période donnée, détermi
 
 **Ces degrés seront activés par les transits !**
 
-#### 1.3 **Fetch les éphémérides de la période**
+#### 1.3 **Calculer les éphémérides de la période**
 
-**Sources** :
-1. https://horoscopes.astro-seek.com/ephemeris-[YEAR]
-2. https://cafeastrology.com
-3. https://mooncalendar.astro-seek.com
+**MÉTHODE PRINCIPALE : Script Swiss Ephemeris (le plus fiable)**
+
+```bash
+# Transits complets pour une année (inclut éclipses, rétrogrades, conjonctions, lunes)
+python3 scripts/ephemeris.py transits --date DD.MM.YYYY --time HH:MM --lat LAT --lon LON --year YYYY
+
+# Éphémérides mensuelles détaillées (positions quotidiennes)
+python3 scripts/ephemeris.py ephemeris --year YYYY --month MM
+
+# Révolution solaire
+python3 scripts/ephemeris.py solar-return --date DD.MM.YYYY --time HH:MM --lat LAT --lon LON --year YYYY
+
+# Ajouter --json pour output JSON parsable
+python3 scripts/ephemeris.py transits --date DD.MM.YYYY --time HH:MM --lat LAT --lon LON --year YYYY --json
+```
+
+Le script calcule automatiquement TOUTES les données nécessaires :
+- Conjonctions rares (Saturn-Neptune, Jupiter-Saturn, etc.)
+- Éclipses solaires et lunaires (type, date, position)
+- Rétrogrades de toutes les planètes (dates de début/fin)
+- Changements de signes des planètes lentes
+- Nouvelles et Pleines Lunes (dates, signes, degrés)
+- Transits des planètes lentes aux points nataux (aspects exacts)
+
+**Sources complémentaires (si données additionnelles nécessaires)** :
+1. WebSearch pour dates spécifiques ou événements astrologiques
+2. https://cafeastrology.com pour interprétations supplémentaires
 
 **Données à récupérer** :
 
@@ -1183,13 +1206,12 @@ Déc 2026  ██████░░░░ (6/10) - Clôture année
 
 ---
 
-## 🔍 Exemple d'analyse complète
+## 🔍 Données de référence 2026 (vérifiées via Swiss Ephemeris)
 
-Voir [examples/saturn-neptune-2026.md](../examples/saturn-neptune-2026.md) pour l'analyse complète des transits 2025-2026 incluant :
-- Saturn-Neptune conjonction février 2026
-- Venus rétrograde octobre-novembre 2026
-- Timing optimal rencontre "maîtresse des ténèbres"
-- Lucky days novembre-décembre 2025
+**Saturn-Neptune conjonction exacte** : ~15 février 2026 à 0° Aries (séparation < 0.5°)
+**Venus rétrograde** : 4 octobre -> 15 novembre 2026 (Scorpio 8° -> Libra 22°)
+**Mercury rétrogrades 2026** : fév-mars (Pisces), juin-juil (Cancer), oct-nov (Scorpio)
+**Éclipses 2026** : Solaire 17 fév (Aquarius), Lunaire 3 mars (Virgo), Solaire 12 août (Leo), Lunaire 28 août (Pisces)
 
 ---
 
